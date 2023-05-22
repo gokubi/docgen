@@ -7,13 +7,13 @@ const dollarUSLocale = Intl.NumberFormat('en-US',{style: "currency",currency: "U
 var ui = SpreadsheetApp.getUi();
 
 //Template Document Ids
-const standardProposalTemplateId = '1HomquqMhAuR7eqe67ftyrMbufyUle5kjOG2l8mXQSXM';
-const standardMSATemplateId = '1QPc6y2f9q6vVx5bMDXveVPYNmpuChFDqHBoJoubfmEE';
-const orgAssessmentSOWTemplateId ='19EedL16PwQ3ErjqYdVJ2P_mQOOTJ2zYiQTbZ-MakMDk';
-const adHocSupportSOWTemplateId ='1rErm4GyvtsephmbBBKOAQ7-MAKxrV4tqiaQCLKVSqiE';
-const agileSOWTeamplateId ='1PN2HRJ1r819jvE0rln1Q_VRKjWBjy9tRJCdZhop033M';
-const managedServicesSOWTemplateId ='1ctajbm7kPeUnEFsLghj9Bz3Ous446hQTMO-Mc0hvpPs';
-const standardNDATemplateId = '15pLcb-TcLVYFNcausW2sgkMMeNA1ruMG2ZcxMpid36M';
+var standardProposalTemplateId = '';
+var standardMSATemplateId = '';
+var orgAssessmentSOWTemplateId ='';
+var adHocSupportSOWTemplateId ='';
+var agileSOWTeamplateId ='';
+var managedServicesSOWTemplateId ='';
+var standardNDATemplateId = '';
 
 //spreasheet ranges
 const msMilestonesRange = 'ManagedServicesMilestones!B2:B20'; //range for the ms milestones fields
@@ -46,6 +46,8 @@ const adHocSupportSizeCell = 'B44';
 const adHocSupportPriceCell = 'B45';
 const orgAssessmentPriceCell = 'B48';
 const contractsFolderIdCell = 'B51'; 
+const agileProjectSummaryCell = 'B53'; 
+
 
 //id for the estimation sheet for the current project
 var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -53,12 +55,16 @@ dataSpreadsheetId = ss.getId();
 
 //variables
 var oppId = '';
+var contractsFolderId = '';
 var ndaId = '';
+var customerFolderExists = false;
+var msaNeeded = false;
 
 //function run on sheet opening loads menu items
 function onOpen() {
   // create the menu items for the spreadsheet
-  ui.createMenu('Doc Generation')
+  ui.createMenu('Solutions')
+      .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
       .addItem('Generate Proposal', 'genProposal')
       .addSubMenu(ui.createMenu('Generate SOW')
         .addItem('Geneate Managed Services or Agile SOW', 'genMSAgileSOW')
@@ -67,49 +73,150 @@ function onOpen() {
       .addItem('Generate NDA', 'genNDA')
 
       .addToUi();
+  
+  getTemplateIds();
 
   //get the customer tab range in the estimate spreadsheet
   var sheet = ss.getSheetByName('Customer');
-  
-  //if opportunity id is blank, prompt for it
-  if(sheet.getRange(oppIdCell).getValue() == ''){
-    var response = ui.prompt('Enter the Id of the Opportunity you are estimating:');
-    // Write Opp Id to field
-    if (response.getSelectedButton() == ui.Button.OK) {
-      sheet.getRange(oppIdCell).setValue(response.getResponseText());
+  if(!ss.getName().includes('Template')){
+    //if opportunity id is blank, prompt for it
+    if(sheet.getRange(oppIdCell).getValue() == ''){
+      var response = ui.prompt('Enter the Id of the Opportunity you are estimating:');
+      // Write Opp Id to field
+      if (response.getSelectedButton() == ui.Button.OK) {
+        sheet.getRange(oppIdCell).setValue(response.getResponseText());
+      }
+    }
+
+    //if google folder id is blank, prompt for it
+    if(sheet.getRange(contractsFolderIdCell).getValue() == ''){
+      var response = ui.prompt('Enter the Folder Id of the customer contracts folder in Google Drive:');
+      // Write folder Id to field
+      if (response.getSelectedButton() == ui.Button.OK) {
+        sheet.getRange(contractsFolderIdCell).setValue(response.getResponseText());
+      }
     }
   }
+  
+  //set customerFolderExists if folder is there
+  if(sheet.getRange(contractsFolderIdCell).getValue() != ''){
+      customerFolderExists = true;
+  }
 
-  //if google folder id is blank, prompt for it
-  if(sheet.getRange(contractsFolderIdCell).getValue() == ''){
-    var response = ui.prompt('Enter the Folder Id of the customer contracts folder in Google Drive:');
-    // Write folder Id to field
-    if (response.getSelectedButton() == ui.Button.OK) {
-      sheet.getRange(contractsFolderIdCell).setValue(response.getResponseText());
-    }
+  //set MSA Needed is checked
+  if(sheet.getRange(msaNeededCell).getValue() != ''){
+      msaNeeded == true;
   }
 }
 
+//grab the template Ids from the constants tab
+function getTemplateIds(){
+  //get the constants tab to set template ids
+  var constantsSheet = ss.getSheetByName('Constants');
+
+  standardProposalTemplateId = constantsSheet.getRange('B10').getValue();
+  standardMSATemplateId = constantsSheet.getRange('B11').getValue();
+  orgAssessmentSOWTemplateId = constantsSheet.getRange('B12').getValue();
+  adHocSupportSOWTemplateId = constantsSheet.getRange('B13').getValue();
+  agileSOWTeamplateId = constantsSheet.getRange('B14').getValue();
+  managedServicesSOWTemplateId = constantsSheet.getRange('B15').getValue();
+  standardNDATemplateId = constantsSheet.getRange('B16').getValue();
+}
+
+//make a copy of the estimation sheet
+function genEstimationSheet(){
+
+  //get opp id
+  var response = ui.prompt('Enter the Id of the Opportunity you are estimating:');
+      // Write Opp Id to field
+      if (response.getSelectedButton() == ui.Button.OK) {
+        oppId = response.getResponseText();
+      }
+
+  //get google folder id
+  var response = ui.prompt('Enter the Folder Id of the customer contracts folder in Google Drive:');
+      // Write folder Id to field
+      if (response.getSelectedButton() == ui.Button.OK) {
+        contractsFolderId = response.getResponseText();
+      }
+
+  var companyName ='';
+  if(contractsFolderId!=''){
+    var folder = DriveApp.getFolderById(contractsFolderId);
+    companyName = folder.getName();
+  }
+
+//make a copy
+  // Duplicate the template MSA using the Drive API.
+  const copyTitle = companyName + ' Estimation Sheet';
+  let copyFile = {
+    title: copyTitle,
+    parents: [{id: 'root'}]
+  };
+
+  //copy the standard MSA to a new file
+  copyFile = Drive.Files.copy(copyFile,dataSpreadsheetId,optionalArgs);
+  var newEstimationSheetId = copyFile.id;
+
+  //move document to customer folder
+  if(contractsFolderId!=''){
+    customerFolderExists = true;
+    var fileToMove = DriveApp.getFileById(newEstimationSheetId);
+    var folder = DriveApp.getFolderById(contractsFolderId);
+    fileToMove.moveTo(folder);
+  }
+  //update Opp id and google folder id
+  //id for the estimation sheet for the current project
+  var ss = SpreadsheetApp.openById(newEstimationSheetId);
+  var customerSheet = ss.getSheetByName('Customer');
+
+  customerSheet.getRange(oppIdCell).setValue(oppId);
+  customerSheet.getRange(contractsFolderIdCell).setValue(contractsFolderId);
+  
+  //prompt with a link
+  if(newEstimationSheetId != null){
+    showAnchor('Open the Estimation Sheet','https://docs.google.com/spreadsheets/d/' + newEstimationSheetId + '/edit#','The cloned Estimation Sheet was created and saved!',"Proposal Generation");
+  }
+}
+
+
 //function for menu item that runs the code to generate a proposal
 function genProposal() {
+    getTemplateIds();
     presentationid = createProposal(standardProposalTemplateId);
     SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
     if(presentationid != null){
-      showAnchor('Open the Proposal Deck','https://docs.google.com/presentation/d/' + presentationid + '/edit#','The proposal deck was saved to your My Drive',"Proposal Generation");
+      showAnchor('Open the Proposal Deck','https://docs.google.com/presentation/d/' + presentationid + '/edit#','The proposal deck was saved to the customer folder.',"Estimation Sheet Cloning");
     }
 }
 
 //function for menu item that runs the code to generate an Agile MSA/SOW     
 function genMSAgileSOW() {
+  getTemplateIds();
   docid = createMSASOW('MSAgile');
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
+  let message = 'The ';
+  if(msaNeeded){
+      message += 'MSA/';
+  }
+  message += 'SOW was saved to ';
+
+if(customerFolderExists){
+  message += 'the customer contracts folder.';
+  
+} else {
+  message += 'your My Drive.';
+}
+  
   if(docid != null){
-    showAnchor('Open the MSA/SOW Doc','https://docs.google.com/document/d/' + docid + '/edit#','The MSA/SOW was saved to the customer contracts folder or your My Drive',"SOW Generation");
+    
+    showAnchor('Open the MSA/SOW Doc','https://docs.google.com/document/d/' + docid + '/edit#',message,"SOW Generation");
   }
 }
 
 //function for menu item that runs the code to generate a Managed Services MSA/SOW     
 function genOrgAssessmentSOW() {
+  getTemplateIds();
   docid = createMSASOW('OrgAssessment');
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
   if(docid != null){
@@ -119,6 +226,7 @@ function genOrgAssessmentSOW() {
 
 //function for menu item that runs the code to generate an Ad Hoc Support MSA/SOW     
 function genAdHocSupportSOW() {
+  getTemplateIds();
   docid = createMSASOW('AdHoc');
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
   if(docid != null){
@@ -128,11 +236,12 @@ function genAdHocSupportSOW() {
 
 //function for menu item that runs the code to generate an NDA
 function genNDA() {
-    ndaId = createNDA(standardNDATemplateId);
-    SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
-    if(ndaId != null){
-      showAnchor('Open the NDA','https://docs.google.com/document/d/' + ndaId + '/edit#','The NDA was saved to the customer contracts folder or your My Drive',"NDA Generation");
-    }
+  getTemplateIds();
+  ndaId = createNDA(standardNDATemplateId);
+  SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
+  if(ndaId != null){
+    showAnchor('Open the NDA','https://docs.google.com/document/d/' + ndaId + '/edit#','The NDA was saved to the customer contracts folder or your My Drive',"NDA Generation");
+  }
 }
 
 //function to create an NDA
@@ -170,6 +279,7 @@ function createNDA(ndaTemplateId) {
 
     //move document to customer folder
     if(contractsFolderId!=''){
+      customerFolderExists = true;
       var fileToMove = DriveApp.getFileById(ndaId);
       var folder = DriveApp.getFolderById(contractsFolderId);
       fileToMove.moveTo(folder);
@@ -209,7 +319,7 @@ function createMSASOW(sowType) {
   const effectiveDate = customerSheet.getRange(effectiveDateCell).getValue();
   const year = customerSheet.getRange(yearCell).getValue();
   const address = customerSheet.getRange(addressCell).getValue();
-  const msaNeeded = customerSheet.getRange(msaNeededCell).getValue();
+  msaNeeded = customerSheet.getRange(msaNeededCell).getValue();
   const customerName = customerSheet.getRange(customerNameCell).getValue();
   const customerTitle = customerSheet.getRange(customerTitleCell).getValue();
   const customerEmail = customerSheet.getRange(customerEmailCell).getValue();
@@ -333,7 +443,8 @@ function createMSASOW(sowType) {
       }
 
       //move document to customer folder
-        if(contractsFolderId!=null){
+        if(contractsFolderId!=''){
+          customerFolderExists = true;
           var fileToMove = DriveApp.getFileById(completeFileId);
           var folder = DriveApp.getFolderById(contractsFolderId);
           fileToMove.moveTo(folder);
@@ -381,6 +492,7 @@ function mergeSOW(sowType) {
       const sowNumber = customerSheet.getRange(sowNumberCell).getValue();
       const sowHalfPrice = dollarUSLocale.format(customerSheet.getRange(sowHalfPriceCell).getValue());
       const agileDuration = customerSheet.getRange(agileDurationCell).getValue(); 
+      const agileProjectSummary = customerSheet.getRange(agileProjectSummaryCell).getValue(); 
 
       //get the account range in the estimate spreadsheet
       let msMilestones = SpreadsheetApp.openById(dataSpreadsheetId).getRange(msMilestonesRange).getValues();
@@ -428,6 +540,7 @@ function mergeSOW(sowType) {
       sowBody.replaceText('[(][(]agile-duration[)][)]',agileDuration);
       sowBody.replaceText('[(][(]orgassessment-price[)][)]',orgAssessmentPrice);
       sowBody.replaceText('[(][(]adhoc-price[)][)]',adHocSupportPrice);
+      sowBody.replaceText('[(][(]agile-project-summary[)][)]',agileProjectSummary);
 
       sowDoc.saveAndClose();
 
