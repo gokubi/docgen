@@ -10,15 +10,17 @@ var ui = SpreadsheetApp.getUi();
 var standardProposalTemplateId = '';
 var standardMSATemplateId = '';
 var orgAssessmentSOWTemplateId ='';
-var adHocSupportSOWTemplateId ='';
+var onDemandSupportSOWTemplateId ='';
 var agileSOWTeamplateId ='';
 var managedServicesSOWTemplateId ='';
 var standardNDATemplateId = '';
+var projectBATemplateId = '';
 
 //spreasheet ranges
 const msMilestonesRange = 'ManagedServicesMilestones!B2:B20'; //range for the ms milestones fields
 const featureSetValuesRange = "FeatureSets!A2:W13"; //range for the feature set fields
 const featureSetItemsValuesRange = "FeatureSetItems!A2:Y200"; //range for the feature set item fields
+const projectBARequirementsRange = "Requirements!F2:J200"; //range for the BA Requirements
 
 //cells
 const oppIdCell = 'B1';
@@ -29,6 +31,8 @@ const customerEmailCell = 'B9';
 const addressCell = 'B10';
 const companyJurisdictionCell = 'B11';
 const companyEntityCell = 'B12';
+const proposalNameCell = 'B16';
+const proposalDateCell = 'B17';
 const agileDurationCell = 'B18';  
 const agileProjectCell = 'B19';
 const msaNeededCell = 'B22';
@@ -42,12 +46,11 @@ const bwAccountManagerEmailCell = 'B36';
 const bwAccountManagerTitleCell = 'B37';
 const msMonthsCell = 'B40';
 const msLevelCell = 'B41';
-const adHocSupportSizeCell = 'B44';
-const adHocSupportPriceCell = 'B45';
+const onDemandSupportSizeCell = 'B44';
+const onDemandSupportPriceCell = 'B45';
 const orgAssessmentPriceCell = 'B48';
 const contractsFolderIdCell = 'B51'; 
 const agileProjectSummaryCell = 'B53'; 
-
 
 //id for the estimation sheet for the current project
 var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -66,14 +69,15 @@ function onOpen() {
   ui.createMenu('Solutions')
       .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
       .addItem('Generate Proposal', 'genProposal')
-      .addSubMenu(ui.createMenu('Generate SOW')
-        .addItem('Geneate Managed Services or Agile SOW', 'genMSAgileSOW')
-        .addItem('Geneate Ad Hoc Support SOW', 'genAdHocSupportSOW')
-        .addItem('Geneate Org Assessment SOW', 'genOrgAssessmentSOW'))
+      .addSubMenu(ui.createMenu('MSAs and SOWs')
+        .addItem('Geneate Managed Services or Agile MSA/SOW', 'genMSAgileSOW')
+        .addItem('Geneate On Demand Support MSA/SOW', 'genonDemandSupportSOW')
+        .addItem('Geneate Org Assessment MSA/SOW', 'genOrgAssessmentSOW'))
       .addItem('Generate NDA', 'genNDA')
-
+      .addItem('Generate Project Requirements Sheet', 'genProjectBASheet')
       .addToUi();
   
+  //get the ids for all templates from the sheet
   getTemplateIds();
 
   //get the customer tab range in the estimate spreadsheet
@@ -101,6 +105,7 @@ function onOpen() {
   //set customerFolderExists if folder is there
   if(sheet.getRange(contractsFolderIdCell).getValue() != ''){
       customerFolderExists = true;
+      contractsFolderId = sheet.getRange(contractsFolderIdCell).getValue();
   }
 
   //set MSA Needed is checked
@@ -117,10 +122,65 @@ function getTemplateIds(){
   standardProposalTemplateId = constantsSheet.getRange('B10').getValue();
   standardMSATemplateId = constantsSheet.getRange('B11').getValue();
   orgAssessmentSOWTemplateId = constantsSheet.getRange('B12').getValue();
-  adHocSupportSOWTemplateId = constantsSheet.getRange('B13').getValue();
+  onDemandSupportSOWTemplateId = constantsSheet.getRange('B13').getValue();
   agileSOWTeamplateId = constantsSheet.getRange('B14').getValue();
   managedServicesSOWTemplateId = constantsSheet.getRange('B15').getValue();
   standardNDATemplateId = constantsSheet.getRange('B16').getValue();
+  projectBATemplateId = constantsSheet.getRange('B17').getValue();
+
+}
+
+//generate the project ba requirements sheet
+function genProjectBASheet(){
+  getTemplateIds();
+  newProjectBASheetId = '';
+  var customerSheet = ss.getSheetByName('Customer');
+  const companyName = customerSheet.getRange(companyNameCell).getValue();
+
+  
+  //make a copy of the projectBA template
+  // Duplicate the template sheet using the Drive API.
+  const copyTitle = companyName + ' Business Analyst Sheet';
+  let copyFile = {
+    title: copyTitle,
+    parents: [{id: 'root'}]
+  };
+
+  //copy the standard MSA to a new file
+  copyFile = Drive.Files.copy(copyFile,projectBATemplateId,optionalArgs);
+  var newProjectBASheetId = copyFile.id;
+
+  //move document to customer folder
+  if(contractsFolderId!=''){
+    customerFolderExists = true;
+    var fileToMove = DriveApp.getFileById(newProjectBASheetId);
+    var folder = DriveApp.getFolderById(contractsFolderId);
+    fileToMove.moveTo(folder);
+  }
+  //get feature set items
+  var data =[];
+  let featureSetItemsValues = SpreadsheetApp.openById(dataSpreadsheetId).getRange(featureSetItemsValuesRange).getValues();
+  for(let i=0;i<featureSetItemsValues.length;i++){
+    const featureSetItemsRow = featureSetItemsValues[i]; //get the row
+    //only process for active rows
+    if(featureSetItemsRow[23] != "" && featureSetItemsRow[4]) {
+      //write them to an array
+      data.push([featureSetItemsRow[0],featureSetItemsRow[2],featureSetItemsRow[1],'','Proposal/SOW','Proposed','','Sales Estimate: ' + featureSetItemsRow[3] + ' hours']);
+    }
+  }
+
+  //get the location on the ba sheet
+  let baRequirementsSheet = SpreadsheetApp.openById(newProjectBASheetId).getSheetByName('Requirements');
+  var lastRow = baRequirementsSheet.getLastRow();
+
+  //write array to ba sheet
+  baRequirementsSheet.getRange(lastRow+1,6,data.length,8).setValues(data);
+    
+  //share link to new sheet
+  SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
+  if(newProjectBASheetId != null){
+    showAnchor('Open the Project BA Sheet','https://docs.google.com/spreadsheets/d/' + newProjectBASheetId + '/edit#','The Project BA Sheet was saved to the customer contracts folder or your My Drive',"Project BA Sheet Generation");
+  }
 }
 
 //make a copy of the estimation sheet
@@ -146,7 +206,7 @@ function genEstimationSheet(){
     companyName = folder.getName();
   }
 
-//make a copy
+  //make a copy
   // Duplicate the template MSA using the Drive API.
   const copyTitle = companyName + ' Estimation Sheet';
   let copyFile = {
@@ -175,19 +235,17 @@ function genEstimationSheet(){
   
   //prompt with a link
   if(newEstimationSheetId != null){
-    showAnchor('Open the Estimation Sheet','https://docs.google.com/spreadsheets/d/' + newEstimationSheetId + '/edit#','The cloned Estimation Sheet was created and saved!',"Proposal Generation");
+    showAnchor('Open the Estimation Sheet','https://docs.google.com/spreadsheets/d/' + newEstimationSheetId + '/edit#','The cloned Estimation Sheet was created and saved!',"Estimation Sheet");
   }
 }
 
-
 //function for menu item that runs the code to generate a proposal
 function genProposal() {
-    getTemplateIds();
-    presentationid = createProposal(standardProposalTemplateId);
-    SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
-    if(presentationid != null){
-      showAnchor('Open the Proposal Deck','https://docs.google.com/presentation/d/' + presentationid + '/edit#','The proposal deck was saved to the customer folder.',"Estimation Sheet Cloning");
-    }
+  getTemplateIds();
+  presentationid = createProposal(standardProposalTemplateId);
+  if(presentationid != null){
+    showAnchor('Open the Proposal Deck','https://docs.google.com/presentation/d/' + presentationid + '/edit#','The proposal deck was saved to the customer folder.',"Proposal Generation");
+  }
 }
 
 //function for menu item that runs the code to generate an Agile MSA/SOW     
@@ -201,13 +259,13 @@ function genMSAgileSOW() {
   }
   message += 'SOW was saved to ';
 
-if(customerFolderExists){
-  message += 'the customer contracts folder.';
-  
-} else {
-  message += 'your My Drive.';
-}
-  
+  if(customerFolderExists){
+    message += 'the customer contracts folder.';
+    
+  } else {
+    message += 'your My Drive.';
+  }
+    
   if(docid != null){
     
     showAnchor('Open the MSA/SOW Doc','https://docs.google.com/document/d/' + docid + '/edit#',message,"SOW Generation");
@@ -224,10 +282,10 @@ function genOrgAssessmentSOW() {
   }
 }
 
-//function for menu item that runs the code to generate an Ad Hoc Support MSA/SOW     
-function genAdHocSupportSOW() {
+//function for menu item that runs the code to generate an On Demand Support MSA/SOW     
+function genonDemandSupportSOW() {
   getTemplateIds();
-  docid = createMSASOW('AdHoc');
+  docid = createMSASOW('onDemand');
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
   if(docid != null){
     showAnchor('Open the MSA/SOW Doc','https://docs.google.com/document/d/' + docid + '/edit#','The MSA/SOW was saved to the customer contracts folder or your My Drive',"SOW Generation");
@@ -325,8 +383,8 @@ function createMSASOW(sowType) {
   const customerEmail = customerSheet.getRange(customerEmailCell).getValue();
   const sowPrice = dollarUSLocale.format(customerSheet.getRange(sowPriceCell).getValue());
   const agileProject = customerSheet.getRange(agileProjectCell).getValue();
-  const adHocSupportSize = customerSheet.getRange(adHocSupportSizeCell).getValue();
-  const adHocSupportPrice = dollarUSLocale.format(customerSheet.getRange(adHocSupportPriceCell).getValue());
+  const onDemandSupportSize = customerSheet.getRange(onDemandSupportSizeCell).getValue();
+  const onDemandSupportPrice = dollarUSLocale.format(customerSheet.getRange(onDemandSupportPriceCell).getValue());
   const orgAssessmentPrice = dollarUSLocale.format(customerSheet.getRange(orgAssessmentPriceCell).getValue());
   const contractsFolderId = customerSheet.getRange(contractsFolderIdCell).getValue();
 
@@ -336,9 +394,9 @@ function createMSASOW(sowType) {
 
   var promptPrice = 0;
   var promptText = 'Want to proceed with creating ';
-  if (sowType == 'AdHoc') {
-    promptText += 'a ' + adHocSupportSize + ' Ad Hoc Support '
-    promptPrice = adHocSupportPrice;
+  if (sowType == 'onDemand') {
+    promptText += 'a ' + onDemandSupportSize + ' On Demand Support '
+    promptPrice = onDemandSupportPrice;
   } else if (sowType == 'OrgAssessment') {
     promptText += 'an Org Assessment ';
     promptPrice = orgAssessmentPrice;
@@ -357,109 +415,109 @@ function createMSASOW(sowType) {
   promptText += 'SOW for ' + companyName + " for " + promptPrice + '?';
 
   var response = ui.alert(promptText, ui.ButtonSet.YES_NO);
-    // Process the user's response.
-    if (response == ui.Button.YES) {
+  // Process the user's response.
+  if (response == ui.Button.YES) {
 
-      //if the MSA Needed checkbox is set, create one
-      if (msaNeeded){
+    //if the MSA Needed checkbox is set, create one
+    if (msaNeeded){
 
-        // Duplicate the template MSA using the Drive API.
-          const copyTitle = companyName + ' MSA';
-          let copyFile = {
-            title: copyTitle,
-            parents: [{id: 'root'}]
-          };
+      // Duplicate the template MSA using the Drive API.
+        const copyTitle = companyName + ' MSA';
+        let copyFile = {
+          title: copyTitle,
+          parents: [{id: 'root'}]
+        };
 
-          //copy the standard MSA to a new file
-          copyFile = Drive.Files.copy(copyFile, standardMSATemplateId,optionalArgs);
-          msaId = copyFile.id;
+        //copy the standard MSA to a new file
+        copyFile = Drive.Files.copy(copyFile, standardMSATemplateId,optionalArgs);
+        msaId = copyFile.id;
 
-          //get into the body and header of the doc
-          const newMSADoc = DocumentApp.openById(msaId);
-          const newMSABody = newMSADoc.getBody();
-          const newMSAHeader = newMSADoc.getHeader();
+        //get into the body and header of the doc
+        const newMSADoc = DocumentApp.openById(msaId);
+        const newMSABody = newMSADoc.getBody();
+        const newMSAHeader = newMSADoc.getHeader();
 
-          //replace merge fields in body
-          newMSABody.replaceText("[(][(]effective-date[)][)]",effectiveDate);
-          newMSABody.replaceText("[(][(]year[)][)]",year);
-          newMSABody.replaceText('[(][(]company-address[)][)]',address);
-          newMSABody.replaceText('[(][(]company-name[)][)]',companyName);
-          newMSABody.replaceText('[(][(]company-entity[)][)]',companyEntity);
-          newMSABody.replaceText('[(][(]company-jurisdiction[)][)]',companyJurisdiction);
-          newMSABody.replaceText('[(][(]customer-name[)][)]',customerName);
-          newMSABody.replaceText('[(][(]customer-title[)][)]',customerTitle);
-          newMSABody.replaceText('[(][(]customer-email[)][)]',customerEmail);
+        //replace merge fields in body
+        newMSABody.replaceText("[(][(]effective-date[)][)]",effectiveDate);
+        newMSABody.replaceText("[(][(]year[)][)]",year);
+        newMSABody.replaceText('[(][(]company-address[)][)]',address);
+        newMSABody.replaceText('[(][(]company-name[)][)]',companyName);
+        newMSABody.replaceText('[(][(]company-entity[)][)]',companyEntity);
+        newMSABody.replaceText('[(][(]company-jurisdiction[)][)]',companyJurisdiction);
+        newMSABody.replaceText('[(][(]customer-name[)][)]',customerName);
+        newMSABody.replaceText('[(][(]customer-title[)][)]',customerTitle);
+        newMSABody.replaceText('[(][(]customer-email[)][)]',customerEmail);
 
-          //replace merge fields in header
-          newMSAHeader.replaceText('[(][(]effective-date[)][)]',effectiveDate);
+        //replace merge fields in header
+        newMSAHeader.replaceText('[(][(]effective-date[)][)]',effectiveDate);
 
-          newMSADoc.saveAndClose();
-      } 
-        
-      //generate the SOW of the correct type
-      if(sowType == 'MSAgile') {
-        //check the spreadsheet for if Agile or MS
-        if(agileProject){
-          sowId = mergeSOW('agile');
-        } else {
-          sowId = mergeSOW('ms');
-        }
+        newMSADoc.saveAndClose();
+    } 
+      
+    //generate the SOW of the correct type
+    if(sowType == 'MSAgile') {
+      //check the spreadsheet for if Agile or MS
+      if(agileProject){
+        sowId = mergeSOW('agile');
       } else {
-        sowId = mergeSOW(sowType);
+        sowId = mergeSOW('ms');
       }
-
-      //if we're creating an MSA, merge the new SOW into it, otherwise just use the SOW
-      if(msaNeeded){
-        //combine the files
-        //var combinedTitle = "Combined Document Example";
-        var combo = DocumentApp.openById(msaId);
-        combo.setName(companyName + ' MSA and SOW');
-        var comboBody = combo.getBody();
-        
-        //console.log('msaId & sowId',msaId + ' : ' + sowId);
-        var docIDs = [sowId];
-        for (var i = 0; i < docIDs.length; ++i ) {
-          var otherBody = DocumentApp.openById(docIDs[i]).getActiveSection();    
-          var totalElements = otherBody.getNumChildren();
-          for( var j = 0; j < totalElements; ++j ) {
-            var element = otherBody.getChild(j).copy();
-            var type = element.getType();
-            if( type == DocumentApp.ElementType.PARAGRAPH )
-              comboBody.appendParagraph(element);
-            else if( type == DocumentApp.ElementType.TABLE )
-              comboBody.appendTable(element);
-            else if( type == DocumentApp.ElementType.LIST_ITEM )
-              comboBody.appendListItem(element);
-            //else
-            // throw new Error("Unknown element type: "+type);
-          }
-          DriveApp.getFileById(docIDs[i]).setTrashed(true);
-        }
-        combo.saveAndClose();
-        completeFileId = msaId;
-
-      } else {
-        completeFileId = sowId;
-      }
-
-      //move document to customer folder
-        if(contractsFolderId!=''){
-          customerFolderExists = true;
-          var fileToMove = DriveApp.getFileById(completeFileId);
-          var folder = DriveApp.getFolderById(contractsFolderId);
-          fileToMove.moveTo(folder);
-        }
-
-      return completeFileId;
+    } else {
+      sowId = mergeSOW(sowType);
     }
+
+    //if we're creating an MSA, merge the new SOW into it, otherwise just use the SOW
+    if(msaNeeded){
+      //combine the files
+      //var combinedTitle = "Combined Document Example";
+      var combo = DocumentApp.openById(msaId);
+      combo.setName(companyName + ' MSA and SOW');
+      var comboBody = combo.getBody();
+      
+      //console.log('msaId & sowId',msaId + ' : ' + sowId);
+      var docIDs = [sowId];
+      for (var i = 0; i < docIDs.length; ++i ) {
+        var otherBody = DocumentApp.openById(docIDs[i]).getActiveSection();    
+        var totalElements = otherBody.getNumChildren();
+        for( var j = 0; j < totalElements; ++j ) {
+          var element = otherBody.getChild(j).copy();
+          var type = element.getType();
+          if( type == DocumentApp.ElementType.PARAGRAPH )
+            comboBody.appendParagraph(element);
+          else if( type == DocumentApp.ElementType.TABLE )
+            comboBody.appendTable(element);
+          else if( type == DocumentApp.ElementType.LIST_ITEM )
+            comboBody.appendListItem(element);
+          //else
+          // throw new Error("Unknown element type: "+type);
+        }
+        DriveApp.getFileById(docIDs[i]).setTrashed(true);
+      }
+      combo.saveAndClose();
+      completeFileId = msaId;
+
+    } else {
+      completeFileId = sowId;
+    }
+
+    //move document to customer folder
+      if(contractsFolderId!=''){
+        customerFolderExists = true;
+        var fileToMove = DriveApp.getFileById(completeFileId);
+        var folder = DriveApp.getFolderById(contractsFolderId);
+        fileToMove.moveTo(folder);
+      }
+
+    return completeFileId;
+  }
 }
 
 function mergeSOW(sowType) {
 
   //get the right SOW template id
   var sowTemplateId = '';
-  if (sowType == 'AdHoc') {
-    sowTemplateId = adHocSupportSOWTemplateId;
+  if (sowType == 'onDemand') {
+    sowTemplateId = onDemandSupportSOWTemplateId;
   } else if (sowType == 'OrgAssessment') {
     sowTemplateId = orgAssessmentSOWTemplateId;
   } else if (sowType == 'ms') {
@@ -482,7 +540,7 @@ function mergeSOW(sowType) {
       const customerTitle = customerSheet.getRange(customerTitleCell).getValue();
       const customerEmail = customerSheet.getRange(customerEmailCell).getValue();
       const sowPrice = dollarUSLocale.format(customerSheet.getRange(sowPriceCell).getValue());
-      const adHocSupportPrice = dollarUSLocale.format(customerSheet.getRange(adHocSupportPriceCell).getValue());
+      const onDemandSupportPrice = dollarUSLocale.format(customerSheet.getRange(onDemandSupportPriceCell).getValue());
       const orgAssessmentPrice = dollarUSLocale.format(customerSheet.getRange(orgAssessmentPriceCell).getValue());
       const msMonths = customerSheet.getRange(msMonthsCell).getValue();
       const msFTELevel = customerSheet.getRange(msLevelCell).getValue();
@@ -503,6 +561,15 @@ function mergeSOW(sowType) {
             milestones += msMilestonesRow[0] + '\n';
           }
       }
+      var msFeatureSetsLanguage = '';
+      let msFeatureSets = SpreadsheetApp.openById(dataSpreadsheetId).getRange(featureSetValuesRange).getValues();
+      for(let i=0;i<msFeatureSets.length;i++){
+        const msFeatureSetRow = msFeatureSets[i]; //get the row
+        if(msFeatureSetRow[5]){
+            msFeatureSetsLanguage += msFeatureSetRow[2] + '\n';
+          }
+      }
+
 
       // Duplicate the template SOW using the Drive API.
       const copyTitle = companyName + ' SOW';
@@ -535,11 +602,13 @@ function mergeSOW(sowType) {
       sowBody.replaceText('[(][(]ms-fte-level[)][)]',msFTELevel);
       sowBody.replaceText('[(][(]ms-milestones[)][)]',milestones);
       sowBody.replaceText('[(][(]ms-sowprice[)][)]',sowPrice);
+      sowBody.replaceText('[(][(]ms-featuresets[)][)]',msFeatureSetsLanguage);
+      
       sowBody.replaceText('[(][(]agile-sowprice[)][)]',sowPrice);
       sowBody.replaceText('[(][(]agile-half-sowprice[)][)]',sowHalfPrice);
       sowBody.replaceText('[(][(]agile-duration[)][)]',agileDuration);
       sowBody.replaceText('[(][(]orgassessment-price[)][)]',orgAssessmentPrice);
-      sowBody.replaceText('[(][(]adhoc-price[)][)]',adHocSupportPrice);
+      sowBody.replaceText('[(][(]ondemand-price[)][)]',onDemandSupportPrice);
       sowBody.replaceText('[(][(]agile-project-summary[)][)]',agileProjectSummary);
 
       sowDoc.saveAndClose();
@@ -554,29 +623,29 @@ function mergeSOW(sowType) {
 //function that generates a Proposal
 function createProposal(templatePresentationId) {
 
-  let responses = [];
+    let responses = [];
 
   //array for the clean up of all tags not used
   featureSetTags2 = [];
-    for (let i = 0; i < 12; ++i) {
-      //for numbers less than 10 we need to add in a 0
-      if(i<9){
-        fsNumber = "0" + (i+1).toString();
-      } else {
-        fsNumber = (i+1).toString();
-      }
-      //create JSON replace objects for each feature set level tag
-      featureSetTags2.push("((FS" + fsNumber + "-number))");
-      featureSetTags2.push("((FS" + fsNumber + "-name))");
-      featureSetTags2.push("((FS" + fsNumber + "-description))");
-      featureSetTags2.push("((FS" + fsNumber + "-percentage))");
-      featureSetTags2.push("((FS" + fsNumber + "-sowprice))");
-
-      for (let i = 0; i < 12; ++i) {
-        //create JSON objects for 12 items for each of the feature set level tags
-        featureSetTags2.push("((FS" + fsNumber + "-Item-" + (i+1).toString() + "-name))");
-      }
+  for (let i = 0; i < 12; ++i) {
+    //for numbers less than 10 we need to add in a 0
+    if(i<9){
+      fsNumber = "0" + (i+1).toString();
+    } else {
+      fsNumber = (i+1).toString();
     }
+    //create JSON replace objects for each feature set level tag
+    featureSetTags2.push("((FS" + fsNumber + "-number))");
+    featureSetTags2.push("((FS" + fsNumber + "-name))");
+    featureSetTags2.push("((FS" + fsNumber + "-description))");
+    featureSetTags2.push("((FS" + fsNumber + "-percentage))");
+    featureSetTags2.push("((FS" + fsNumber + "-sowprice))");
+
+    for (let i = 0; i < 12; ++i) {
+      //create JSON objects for 12 items for each of the feature set level tags
+      featureSetTags2.push("((FS" + fsNumber + "-Item-" + (i+1).toString() + "-name))");
+    }
+  }
 
   try {
     //get the account range in the estimate spreadsheet
@@ -584,23 +653,27 @@ function createProposal(templatePresentationId) {
     var customerSheet = ss.getSheetByName('Customer');
 
     //create a new merged slide deck for the first line in the sheet
-    const companyName = customerSheet.getRange('B6').getValue(); // name in column 1
-    const proposalName = customerSheet.getRange('B16').getValue(); // proposal name in column 2
-    const proposalDate = Utilities.formatDate(customerSheet.getRange('B17').getValue(), "GMT+1", "MM.dd.yyyy"); // date in column 3
-    const sowprice =   dollarUSLocale.format(customerSheet.getRange('B27').getValue());
+    const companyName = customerSheet.getRange(companyNameCell).getValue(); // name in column 1
+    const proposalName = customerSheet.getRange(proposalNameCell).getValue(); // proposal name in column 2
+    const proposalDate = Utilities.formatDate(customerSheet.getRange(proposalDateCell).getValue(), "GMT+1", "MM.dd.yyyy"); // date in column 3
+    const sowprice =   dollarUSLocale.format(customerSheet.getRange(sowPriceCell).getValue());
 
     var response = ui.alert('Want to proceed with creating a proposal for ' + companyName, ui.ButtonSet.YES_NO);
     // Process the user's response.
     if (response == ui.Button.YES) {
 
-      //craft JSON objects for account level replacements
-      requestJSON = '{"replaceAllText":{"containsText":{"text":"((company-name))","matchCase":true},"replaceText":"' + companyName + '"}},{"replaceAllText":{"containsText":{"text":"((proposal-name))","matchCase":true},"replaceText":"' + proposalName + '"}},{"replaceAllText":{"containsText":{"text":"((proposal-date))","matchCase":true},"replaceText":"' + proposalDate + '"}},{"replaceAllText":{"containsText":{"text":"((sowprice))","matchCase":true},"replaceText":"' + sowprice + '"}}';
+      //JSON for replacement of key fields
+      requestJSON = jsonForReplace('((company-name))',companyName);
+      requestJSON += ',' + jsonForReplace('((proposal-name))',proposalName);
+      requestJSON += ',' + jsonForReplace('((proposal-date))',proposalDate);
+      requestJSON += ',' + jsonForReplace('((sowprice))',sowprice);
 
 
       //get the feature set range in the estimate spreadsheet
       let featureSetValues = SpreadsheetApp.openById(dataSpreadsheetId).getRange(featureSetValuesRange).getValues();
 
-      
+      var fsAssumptions = [];
+
       //loop through all the feature set rows
       for(let i=0;i<featureSetValues.length;i++){
         const featureSetRow = featureSetValues[i]; //get the row
@@ -610,8 +683,14 @@ function createProposal(templatePresentationId) {
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-number))',featureSetRow[0]);
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-name))',featureSetRow[2]);
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-description))',featureSetRow[3]);
+          /*
+          let assumptionsText = featureSetRow[4];
+          let asumptionsEscaped = assumptionsText.replace(/\n/g, "\\\\n").replace(/\r/g, "\\\\r").replace(/\t/g, "\\\\t");
+          requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-assumptions))',assumptionsText);
+          */
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-percentage))',Math.floor(featureSetRow[9] * 100) + "%");
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-sowprice))',dollarUSLocale.format(featureSetRow[8]));
+          fsAssumptions.push(featureSetRow[4]);
         }
       }
 
@@ -636,10 +715,9 @@ function createProposal(templatePresentationId) {
       //add brackets to JSON string
       requestJSON = "[" + requestJSON + "]";
 
-      //console.log('requestJSON: ' + requestJSON);
-
+      //parse the JSON for use in replace
       const requests = JSON.parse(requestJSON);
-      
+
       // Duplicate the template presentation using the Drive API.
       const copyTitle = companyName + ' Salesforce Proposal';
       let copyFile = {
@@ -647,23 +725,53 @@ function createProposal(templatePresentationId) {
         parents: [{id: 'root'}]
       };
 
-      copyFile = Drive.Files.copy(copyFile, templatePresentationId);
+      copyFile = Drive.Files.copy(copyFile, templatePresentationId,optionalArgs);
       const presentationCopyId = copyFile.id;
+      var sheet = ss.getSheetByName('Customer');
+
+      //set customerFolderExists if folder is there
+      if(sheet.getRange(contractsFolderIdCell).getValue() != ''){
+          contractsFolderId = sheet.getRange(contractsFolderIdCell).getValue();
+      }
+      //move document to customer folder
+      if(contractsFolderId!=''){
+        customerFolderExists = true;
+        var fileToMove = DriveApp.getFileById(presentationCopyId);
+        var folder = DriveApp.getFolderById(contractsFolderId);
+        fileToMove.moveTo(folder);
+      } 
 
       // Execute the replaces for this presentation.
       const result = Slides.Presentations.batchUpdate({
         requests: requests
       }, presentationCopyId);
+      /*
+      var currentDeck = SlidesApp.openById(presentationCopyId);
+      var allSlides = currentDeck.getSlides();
 
-      // Count the total number of replacements made.
-      let numReplacements = 0;
-      result.replies.forEach(function(reply) {
-        numReplacements += reply.replaceAllText.occurrencesChanged;
-      }); 
-
-      //console.log('Created presentation for %s with ID: %s', customerName, presentationCopyId);
-      //console.log('Replaced %s text instances', numReplacements);
-
+      console.log('fsAssumptions.length: ' + fsAssumptions.length);
+      allSlides.forEach(function(slide){
+        let allShapes = slide.getShapes();
+        for(let i=0;i<fsAssumptions.length;i++){
+          console.log('fsAssumptions: ' + fsAssumptions[i]);
+          console.log('allshapes.length: ' + allShapes.length);
+          for(let j=0;j<allShapes.length;j++){
+            console.log('allShapes: ' + allShapes[j]);
+           
+              allShapes.forEach(function(shape){
+                 let text = shape.getText();
+                 if(i<10){  
+                   text.replaceAllText('((FS0' + (i+1) + '-assumptions))',fsAssumptions[i]);
+                } else {
+                  text.replaceAllText('((FS0' + i + '-assumptions))',fsAssumptions[i]);
+                }
+              });
+            
+          }
+        }
+      });
+      currentDeck.saveAndClose();
+      */
       return presentationCopyId;
     }
 
