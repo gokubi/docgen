@@ -79,7 +79,7 @@ function onOpen() {
   ui.createMenu('Solutions')
       
       .addSubMenu(ui.createMenu('Proposals')
-        .addItem('Generate Proposal', 'genProposal'))
+        .addItem('Generate Proposal Slides', 'genProposal'))
       .addSubMenu(ui.createMenu('MSAs and SOWs')
         .addItem('Geneate Managed Services or Agile MSA/SOW', 'genMSAgileSOW')
         .addItem('Geneate On Demand Support MSA/SOW', 'genonDemandSupportSOW')
@@ -689,7 +689,7 @@ function createProposal(templatePresentationId) {
     featureSetTags2.push("((FS" + fsNumber + "-assumptions))");
     featureSetTags2.push("((FS" + fsNumber + "-percentage))");
     featureSetTags2.push("((FS" + fsNumber + "-sowprice))");
-
+    
     for (let i = 0; i < 12; ++i) {
       //create JSON objects for 12 items for each of the feature set level tags
       featureSetTags2.push("((FS" + fsNumber + "-Item-" + (i+1).toString() + "-name))");
@@ -702,10 +702,13 @@ function createProposal(templatePresentationId) {
     var customerSheet = ss.getSheetByName('Customer');
 
     //create a new merged slide deck for the first line in the sheet
-    const companyName = customerSheet.getRange(companyNameCell).getValue(); // name in column 1
-    const proposalName = customerSheet.getRange(proposalNameCell).getValue(); // proposal name in column 2
-    const proposalDate = Utilities.formatDate(customerSheet.getRange(proposalDateCell).getValue(), "GMT+1", "MM.dd.yyyy"); // date in column 3
+    const companyName = customerSheet.getRange(companyNameCell).getValue(); // name
+    const proposalName = customerSheet.getRange(proposalNameCell).getValue(); // proposal name
+    const proposalDate = Utilities.formatDate(customerSheet.getRange(proposalDateCell).getValue(), "GMT+1", "MM.dd.yyyy"); // date
     const sowprice =   dollarUSLocale.format(customerSheet.getRange(sowPriceCell).getValue());
+    const msLevel = customerSheet.getRange(msLevelCell).getValue(); // proposal name
+    const msMonths = customerSheet.getRange(msMonthsCell).getValue(); // proposal name
+
 
     var response = ui.alert('Want to proceed with creating a proposal for ' + companyName, ui.ButtonSet.YES_NO);
     // Process the user's response.
@@ -716,6 +719,8 @@ function createProposal(templatePresentationId) {
       requestJSON += ',' + jsonForReplace('((proposal-name))',proposalName);
       requestJSON += ',' + jsonForReplace('((proposal-date))',proposalDate);
       requestJSON += ',' + jsonForReplace('((sowprice))',sowprice);
+      requestJSON += ',' + jsonForReplace('((ms-fte-level))',msLevel);
+      requestJSON += ',' + jsonForReplace('((ms-months))',msMonths);
 
 
       //get the feature set range in the estimate spreadsheet
