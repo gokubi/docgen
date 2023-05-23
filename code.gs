@@ -1,12 +1,17 @@
+/*
+This Apps Script is attached to an estimation spreadsheet template
+and serves to make estimation and document generation easier and more consistent.
+*/
+
 //argument to work with Shared Drives in Google Workspace
 const optionalArgs={supportsAllDrives: true};
 //locale for formatting US dollars
 const dollarUSLocale = Intl.NumberFormat('en-US',{style: "currency",currency: "USD",minimumFractionDigits: 0,maximumFractionDigits: 0,});
 
-//load the UI for menu items
+//load the UI for working with menu items and dialogs
 var ui = SpreadsheetApp.getUi();
 
-//Template Document Ids
+//Template Document Ids for generation of slides, spreadsheets, and documents
 var standardProposalTemplateId = '';
 var standardMSATemplateId = '';
 var orgAssessmentSOWTemplateId ='';
@@ -16,13 +21,13 @@ var managedServicesSOWTemplateId ='';
 var standardNDATemplateId = '';
 var projectBATemplateId = '';
 
-//spreasheet ranges
+//spreasheet ranges in the estimation sheet
 const msMilestonesRange = 'ManagedServicesMilestones!B2:B20'; //range for the ms milestones fields
 const featureSetValuesRange = "FeatureSets!A2:W13"; //range for the feature set fields
 const featureSetItemsValuesRange = "FeatureSetItems!A2:Y200"; //range for the feature set item fields
 const projectBARequirementsRange = "Requirements!F2:J200"; //range for the BA Requirements
 
-//cells
+//cell locations for pulling data
 const oppIdCell = 'B1';
 const companyNameCell = 'B6';
 const customerNameCell = 'B7';
@@ -56,14 +61,14 @@ const agileProjectSummaryCell = 'B53';
 var ss = SpreadsheetApp.getActiveSpreadsheet();
 dataSpreadsheetId = ss.getId();
 
-//variables
+//key global variables
 var oppId = '';
 var contractsFolderId = '';
 var ndaId = '';
 var customerFolderExists = false;
 var msaNeeded = false;
 
-//function run on sheet opening loads menu items
+//function run on sheet opening loads menu items and global variables
 function onOpen() {
   // create the menu items for the spreadsheet
   ui.createMenu('Solutions')
@@ -82,6 +87,8 @@ function onOpen() {
 
   //get the customer tab range in the estimate spreadsheet
   var sheet = ss.getSheetByName('Customer');
+
+  //if this isn't the default template file, but a copy of it, check for Opp Id and contracts folder id, and ask for them if they are missing
   if(!ss.getName().includes('Template')){
     //if opportunity id is blank, prompt for it
     if(sheet.getRange(oppIdCell).getValue() == ''){
@@ -108,7 +115,7 @@ function onOpen() {
       contractsFolderId = sheet.getRange(contractsFolderIdCell).getValue();
   }
 
-  //set MSA Needed is checked
+  //set MSA Needed if checked
   if(sheet.getRange(msaNeededCell).getValue() != ''){
       msaNeeded == true;
   }
@@ -130,7 +137,7 @@ function getTemplateIds(){
 
 }
 
-//generate the project ba requirements sheet
+//generate the project ba requirements sheet that will be used by delivery
 function genProjectBASheet(){
   getTemplateIds();
   newProjectBASheetId = '';
@@ -160,6 +167,8 @@ function genProjectBASheet(){
   //get feature set items
   var data =[];
   let featureSetItemsValues = SpreadsheetApp.openById(dataSpreadsheetId).getRange(featureSetItemsValuesRange).getValues();
+
+  //loop through all feature site items to get them into an array for saving to the ba sheet
   for(let i=0;i<featureSetItemsValues.length;i++){
     const featureSetItemsRow = featureSetItemsValues[i]; //get the row
     //only process for active rows
@@ -183,17 +192,17 @@ function genProjectBASheet(){
   }
 }
 
-//make a copy of the estimation sheet
+//make a copy of the estimation sheet template for a new prospect
 function genEstimationSheet(){
 
-  //get opp id
+  //get the new opp id
   var response = ui.prompt('Enter the Id of the Opportunity you are estimating:');
       // Write Opp Id to field
       if (response.getSelectedButton() == ui.Button.OK) {
         oppId = response.getResponseText();
       }
 
-  //get google folder id
+  //get the new google folder id
   var response = ui.prompt('Enter the Folder Id of the customer contracts folder in Google Drive:');
       // Write folder Id to field
       if (response.getSelectedButton() == ui.Button.OK) {
@@ -201,6 +210,7 @@ function genEstimationSheet(){
       }
 
   var companyName ='';
+  //get the company name from the folder name
   if(contractsFolderId!=''){
     var folder = DriveApp.getFolderById(contractsFolderId);
     companyName = folder.getName();
@@ -673,8 +683,6 @@ function createProposal(templatePresentationId) {
       //get the feature set range in the estimate spreadsheet
       let featureSetValues = SpreadsheetApp.openById(dataSpreadsheetId).getRange(featureSetValuesRange).getValues();
 
-      var fsAssumptions = [];
-
       //loop through all the feature set rows
       for(let i=0;i<featureSetValues.length;i++){
         const featureSetRow = featureSetValues[i]; //get the row
@@ -694,7 +702,6 @@ function createProposal(templatePresentationId) {
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-assumptions))',assumptionsText);
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-percentage))',Math.floor(featureSetRow[9] * 100) + "%");
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-sowprice))',dollarUSLocale.format(featureSetRow[8]));
-          //fsAssumptions.push(featureSetRow[4]);
         }
       }
 
@@ -749,33 +756,7 @@ function createProposal(templatePresentationId) {
       const result = Slides.Presentations.batchUpdate({
         requests: requests
       }, presentationCopyId);
-      /*
-      var currentDeck = SlidesApp.openById(presentationCopyId);
-      var allSlides = currentDeck.getSlides();
-
-      console.log('fsAssumptions.length: ' + fsAssumptions.length);
-      allSlides.forEach(function(slide){
-        let allShapes = slide.getShapes();
-        for(let i=0;i<fsAssumptions.length;i++){
-          console.log('fsAssumptions: ' + fsAssumptions[i]);
-          console.log('allshapes.length: ' + allShapes.length);
-          for(let j=0;j<allShapes.length;j++){
-            console.log('allShapes: ' + allShapes[j]);
-           
-              allShapes.forEach(function(shape){
-                 let text = shape.getText();
-                 if(i<10){  
-                   text.replaceAllText('((FS0' + (i+1) + '-assumptions))',fsAssumptions[i]);
-                } else {
-                  text.replaceAllText('((FS0' + i + '-assumptions))',fsAssumptions[i]);
-                }
-              });
-            
-          }
-        }
-      });
-      currentDeck.saveAndClose();
-      */
+  
       return presentationCopyId;
     }
 
