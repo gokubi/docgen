@@ -638,6 +638,7 @@ function createProposal(templatePresentationId) {
     featureSetTags2.push("((FS" + fsNumber + "-number))");
     featureSetTags2.push("((FS" + fsNumber + "-name))");
     featureSetTags2.push("((FS" + fsNumber + "-description))");
+    featureSetTags2.push("((FS" + fsNumber + "-assumptions))");
     featureSetTags2.push("((FS" + fsNumber + "-percentage))");
     featureSetTags2.push("((FS" + fsNumber + "-sowprice))");
 
@@ -679,18 +680,21 @@ function createProposal(templatePresentationId) {
         const featureSetRow = featureSetValues[i]; //get the row
         //only process for active rows
         if(featureSetRow[0] != "") {
+
+          var assumptionsText = '';
+          if(featureSetRow[4]!=''){
+            //construct the assumptions string, removing new lines
+            assumptionsText = 'Assumptions: ' + featureSetRow[4].replace(/(\r\n|\n|\r)/gm, "");
+          }
+
           //create JSON replace objects and append to the full JSON
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-number))',featureSetRow[0]);
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-name))',featureSetRow[2]);
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-description))',featureSetRow[3]);
-          /*
-          let assumptionsText = featureSetRow[4];
-          let asumptionsEscaped = assumptionsText.replace(/\n/g, "\\\\n").replace(/\r/g, "\\\\r").replace(/\t/g, "\\\\t");
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-assumptions))',assumptionsText);
-          */
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-percentage))',Math.floor(featureSetRow[9] * 100) + "%");
           requestJSON += ',' + jsonForReplace('((' + featureSetRow[0] + '-sowprice))',dollarUSLocale.format(featureSetRow[8]));
-          fsAssumptions.push(featureSetRow[4]);
+          //fsAssumptions.push(featureSetRow[4]);
         }
       }
 
