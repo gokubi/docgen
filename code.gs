@@ -25,6 +25,7 @@ var projectBATemplateId = '';
 const msMilestonesRange = 'ManagedServicesMilestones!B2:B20'; //range for the ms milestones fields
 const featureSetValuesRange = "FeatureSets!A2:W13"; //range for the feature set fields
 const featureSetItemsValuesRange = "FeatureSetItems!A2:Y200"; //range for the feature set item fields
+const projectBASOWRange = "ProjectPlan!B10:B13"; //range for the BA SOW details
 const projectBARequirementsRange = "Requirements!F2:J200"; //range for the BA Requirements
 
 //cell locations for pulling data
@@ -40,6 +41,7 @@ const proposalNameCell = 'B16';
 const proposalDateCell = 'B17';
 const agileDurationCell = 'B18';  
 const agileProjectCell = 'B19';
+const projectTypeCell = 'B20';
 const msaNeededCell = 'B22';
 const sowNumberCell = 'B23';
 const effectiveDateCell = 'B25';
@@ -55,6 +57,7 @@ const onDemandSupportSizeCell = 'B44';
 const onDemandSupportPriceCell = 'B45';
 const orgAssessmentPriceCell = 'B48';
 const contractsFolderIdCell = 'B51'; 
+const projectsFolderIdCell = 'B52'; 
 const agileProjectSummaryCell = 'B53'; 
 
 //id for the estimation sheet for the current project
@@ -64,6 +67,8 @@ dataSpreadsheetId = ss.getId();
 //key global variables
 var oppId = '';
 var contractsFolderId = '';
+var projectsFolderId = '';
+
 var ndaId = '';
 var customerFolderExists = false;
 var msaNeeded = false;
@@ -144,10 +149,33 @@ function getTemplateIds(){
 //generate the project ba requirements sheet that will be used by delivery
 function genProjectBASheet(){
   getTemplateIds();
+
   newProjectBASheetId = '';
   var customerSheet = ss.getSheetByName('Customer');
   const companyName = customerSheet.getRange(companyNameCell).getValue();
+  projectsFolderId = customerSheet.getRange(projectsFolderIdCell).getValue();
+  const sowPrice = dollarUSLocale.format(customerSheet.getRange(sowPriceCell).getValue());
+  const projectType = customerSheet.getRange(projectTypeCell).getValue();
+  const agileDuration = customerSheet.getRange(agileDurationCell).getValue();
+  const msMonths = customerSheet.getRange(msMonthsCell).getValue();
+  const oppId = customerSheet.getRange(oppIdCell).getValue();
 
+  var durationText = '';
+if(projectType == 'Agile Project'){
+  durationText = agileDuration + ' weeks';
+} else {
+  durationText = msMonths + ' months';
+}
+
+  //if google folder id is blank, prompt for it
+  if(projectsFolderId == ''){
+    var response = ui.prompt('Enter the Folder Id of the customer projects folder in Google Drive:');
+    // Write folder Id to field
+    if (response.getSelectedButton() == ui.Button.OK) {
+      projectsFolderId = response.getResponseText();
+      customerSheet.getRange(projectsFolderIdCell).setValue(projectsFolderId);
+    }
+  }
   
   //make a copy of the projectBA template
   // Duplicate the template sheet using the Drive API.
@@ -162,10 +190,9 @@ function genProjectBASheet(){
   var newProjectBASheetId = copyFile.id;
 
   //move document to customer folder
-  if(contractsFolderId!=''){
-    customerFolderExists = true;
+  if(projectsFolderId!=''){
     var fileToMove = DriveApp.getFileById(newProjectBASheetId);
-    var folder = DriveApp.getFolderById(contractsFolderId);
+    var folder = DriveApp.getFolderById(projectsFolderId);
     fileToMove.moveTo(folder);
   }
   //get feature set items
@@ -182,12 +209,19 @@ function genProjectBASheet(){
     }
   }
 
-  //get the location on the ba sheet
+  //get the location on the ba 
   let baRequirementsSheet = SpreadsheetApp.openById(newProjectBASheetId).getSheetByName('Requirements');
   var lastRow = baRequirementsSheet.getLastRow();
 
   //write array to ba sheet
   baRequirementsSheet.getRange(lastRow+1,6,data.length,8).setValues(data);
+
+  //get SOW range
+  let projectPlanSheet = SpreadsheetApp.openById(newProjectBASheetId).getSheetByName('ProjectPlan');
+    projectPlanSheet.getRange('B10').setValue(sowPrice);
+    projectPlanSheet.getRange('B11').setValue(projectType);
+    projectPlanSheet.getRange('B12').setValue(durationText);
+    projectPlanSheet.getRange('B13').setValue('https://bitwiseindustries.lightning.force.com/lightning/r/Opportunity/' + oppId + '/view');
     
   //share link to new sheet
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
