@@ -72,14 +72,18 @@ var msaNeeded = false;
 function onOpen() {
   // create the menu items for the spreadsheet
   ui.createMenu('Solutions')
-      .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
-      .addItem('Generate Proposal', 'genProposal')
+      
+      .addSubMenu(ui.createMenu('Proposals')
+        .addItem('Generate Proposal', 'genProposal'))
       .addSubMenu(ui.createMenu('MSAs and SOWs')
         .addItem('Geneate Managed Services or Agile MSA/SOW', 'genMSAgileSOW')
         .addItem('Geneate On Demand Support MSA/SOW', 'genonDemandSupportSOW')
         .addItem('Geneate Org Assessment MSA/SOW', 'genOrgAssessmentSOW'))
-      .addItem('Generate NDA', 'genNDA')
-      .addItem('Generate Project Requirements Sheet', 'genProjectBASheet')
+      .addSubMenu(ui.createMenu('NDAs')
+        .addItem('Generate NDA', 'genNDA'))
+      .addSubMenu(ui.createMenu('Delivery')
+        .addItem('Generate Project Requirements Sheet', 'genProjectBASheet'))
+      .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
       .addToUi();
   
   //get the ids for all templates from the sheet
