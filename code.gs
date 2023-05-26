@@ -28,6 +28,20 @@ const featureSetItemsValuesRange = "FeatureSetItems!A2:Y200"; //range for the fe
 const projectBASOWRange = "ProjectPlan!B10:B13"; //range for the BA SOW details
 const projectBARequirementsRange = "Requirements!F2:J200"; //range for the BA Requirements
 
+//signing template names
+const agilePlusMSA = 'Salesforce Agile Project + MSA';
+const msPlusMSA = 'Salesforce Managed Service + MSA';
+const onDemandPlusMSA = 'Salesforce On Demand Support + MSA';
+const orgAssessmentPlusMSA = 'Salesforce Org Assessment + MSA';
+const ndaNoMSA = 'Salesforce NDA';
+const orgAssessmentNoMSA = 'Salesforce Org Assessment (no MSA)';
+const onDemandNoMSA = 'Salesforce On Demand (no MSA)';
+const agileNoPlusMSA = 'Salesforce Agile Project (no MSA)';
+const msNoMSA = 'Salesforce Managed Service (no MSA)';
+
+//email constants
+const legalEmail = 'steve@gokubi.com';
+
 //cell locations for pulling data
 const oppIdCell = 'B1';
 const companyNameCell = 'B6';
@@ -88,6 +102,8 @@ function onOpen() {
         .addItem('Generate NDA', 'genNDA'))
       .addSubMenu(ui.createMenu('Delivery')
         .addItem('Generate Project Requirements Sheet', 'genProjectBASheet'))
+      .addSubMenu(ui.createMenu('Document Sending')
+        .addItem('Send Doc to Legal', 'sendToLegal'))
       .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
       .addToUi();
   
@@ -128,6 +144,7 @@ function onOpen() {
   if(sheet.getRange(msaNeededCell).getValue() != ''){
       msaNeeded == true;
   }
+
 }
 
 //grab the template Ids from the constants tab
@@ -146,6 +163,97 @@ function getTemplateIds(){
 
 }
 
+//add a line to the spreadsheet for attaching to Salesforce Opportunities
+function addFileToOpportunity(fileId,opportunityId, signingTemplate){
+  //get customer data
+   var customerSheet = ss.getSheetByName('Customer');
+  const customerName = customerSheet.getRange(customerNameCell).getValue();
+  const customerTitle = customerSheet.getRange(customerTitleCell).getValue();
+  const customerEmail = customerSheet.getRange(customerEmailCell).getValue();
+  
+  //connect to spreadsheet
+  let oppAttachmentSheet = SpreadsheetApp.openById('11-Fvt6vhC3gVA2BnvTwKuSKRwFEioULMOaSxANGqh7Y').getSheetByName('OppAttachments');
+  let lastRow = oppAttachmentSheet.getLastRow();
+  let data = [];
+  data.push([opportunityId,fileId,customerName,customerEmail,'Steve Andersen','sandersen@bitwiseindustries.com',signingTemplate,'','sandersen@bitwiseindustries.com','','','New']);
+  //write array to ba sheet
+  oppAttachmentSheet.getRange(lastRow+1,1,1,12).setValues(data);
+  //construct row
+  //append row
+
+}
+
+//grab the highlighted document on the Documents sheet and email it to legal
+function sendToLegal() {
+  const specificSheet = "Documents"   // for example
+
+  const currentCell = ss.getSelection().getCurrentCell().getA1Notation();
+  const currentRow = currentCell.substring(1);
+  const documentsSheet = ss.getSelection().getActiveSheet();
+  const sheetCheck = (documentsSheet.getName() == specificSheet);
+
+  if (!sheetCheck) {
+    return;
+  } else {
+
+    var customerSheet = ss.getSheetByName('Customer');
+    let companyName = customerSheet.getRange(companyNameCell).getValue();
+
+    let myFileId = documentsSheet.getRange('B' + currentRow).getValue();
+    let statusField = documentsSheet.getRange('E' + currentRow);
+    let docType = documentsSheet.getRange('C' + currentRow).getValue();
+    
+    var myFile = DriveApp.getFileById(myFileId);
+
+    var url = 'https://docs.google.com/feeds/download/documents/export/Export?id=' + myFileId + '&exportFormat=docx';
+    var options = {
+    headers: {
+      Authorization: "Bearer " + ScriptApp.getOAuthToken()
+    },
+        muteHttpExceptions: true
+    }
+    var response = UrlFetchApp.fetch(url, options);
+    var doc = response.getBlob();
+    var newDoc = DriveApp.createFile(doc).setName(myFile.getName());
+
+    let emailBody = '';
+    emailBody += 'Hi all,\n';
+    emailBody += 'Please review this ' + docType;
+    emailBody += ' for ' + companyName + '.\n\n';
+    emailBody += 'Thank you!';
+
+    let emailSubject = 'SOW review: ' + myFile.getName();
+
+    MailApp.sendEmail(
+      legalEmail,
+      emailSubject,
+      emailBody,
+      {
+        name: myFile.getName(),
+        attachments: [newDoc]
+      }
+    );
+    newDoc.setTrashed(true);
+    statusField.setValue('Sent to Legal');
+    let today = new Date().toLocaleDateString("en-US");
+    documentsSheet.getRange('F'+ currentRow).setValue(today);
+  }
+}
+
+//function to record docs as they are created
+function trackDocument(docTitle,docId,docType){
+  //get customer data
+  let documentSheet = ss.getSheetByName('Documents');
+  let nextRow = documentSheet.getLastRow()+1;
+  let data = [];
+
+  let date = new Date().toLocaleDateString("en-US");
+  data.push([docTitle,docId,docType,date,'Created']);
+  //write array to Documents tab
+  documentSheet.getRange(nextRow,1,1,5).setValues(data);
+  documentSheet.getRange('G' + nextRow).setFormula('=HYPERLINK("https://docs.google.com/document/d/' + docId + '/edit","'+ docTitle +'")');
+}
+
 //generate the project ba requirements sheet that will be used by delivery
 function genProjectBASheet(){
   getTemplateIds();
@@ -160,12 +268,13 @@ function genProjectBASheet(){
   const msMonths = customerSheet.getRange(msMonthsCell).getValue();
   const oppId = customerSheet.getRange(oppIdCell).getValue();
 
+  //set up duration text for merging
   var durationText = '';
-if(projectType == 'Agile Project'){
-  durationText = agileDuration + ' weeks';
-} else {
-  durationText = msMonths + ' months';
-}
+  if(projectType == 'Agile Project'){
+    durationText = agileDuration + ' weeks';
+  } else {
+    durationText = msMonths + ' months';
+  }
 
   //if google folder id is blank, prompt for it
   if(projectsFolderId == ''){
@@ -218,10 +327,10 @@ if(projectType == 'Agile Project'){
 
   //get SOW range
   let projectPlanSheet = SpreadsheetApp.openById(newProjectBASheetId).getSheetByName('ProjectPlan');
-    projectPlanSheet.getRange('B10').setValue(sowPrice);
-    projectPlanSheet.getRange('B11').setValue(projectType);
-    projectPlanSheet.getRange('B12').setValue(durationText);
-    projectPlanSheet.getRange('B13').setValue('https://bitwiseindustries.lightning.force.com/lightning/r/Opportunity/' + oppId + '/view');
+  projectPlanSheet.getRange('B10').setValue(sowPrice);
+  projectPlanSheet.getRange('B11').setValue(projectType);
+  projectPlanSheet.getRange('B12').setValue(durationText);
+  projectPlanSheet.getRange('B13').setValue('https://bitwiseindustries.lightning.force.com/lightning/r/Opportunity/' + oppId + '/view');
     
   //share link to new sheet
   SpreadsheetApp.getUi() // Or DocumentApp or FormApp.
@@ -235,17 +344,17 @@ function genEstimationSheet(){
 
   //get the new opp id
   var response = ui.prompt('Enter the Id of the Opportunity you are estimating:');
-      // Write Opp Id to field
-      if (response.getSelectedButton() == ui.Button.OK) {
-        oppId = response.getResponseText();
-      }
+  // Write Opp Id to field
+  if (response.getSelectedButton() == ui.Button.OK) {
+    oppId = response.getResponseText();
+  }
 
   //get the new google folder id
   var response = ui.prompt('Enter the Folder Id of the customer contracts folder in Google Drive:');
-      // Write folder Id to field
-      if (response.getSelectedButton() == ui.Button.OK) {
-        contractsFolderId = response.getResponseText();
-      }
+  // Write folder Id to field
+  if (response.getSelectedButton() == ui.Button.OK) {
+    contractsFolderId = response.getResponseText();
+  }
 
   var companyName ='';
   //get the company name from the folder name
@@ -356,6 +465,8 @@ function createNDA(ndaTemplateId) {
   var customerSheet = ss.getSheetByName('Customer');
 
   //get cells from the range
+  oppId = customerSheet.getRange(oppIdCell).getValue();
+
   const companyName = customerSheet.getRange(companyNameCell).getValue();
   const companyEntity = customerSheet.getRange(companyEntityCell).getValue();
   const companyJurisdiction = customerSheet.getRange(companyJurisdictionCell).getValue();
@@ -409,6 +520,8 @@ function createNDA(ndaTemplateId) {
 
     newNDADoc.saveAndClose();
   }
+  trackDocument(companyName + ' NDA',ndaId,ndaNoMSA);
+
   return ndaId;
 }
 
@@ -555,6 +668,8 @@ function createMSASOW(sowType) {
         var folder = DriveApp.getFolderById(contractsFolderId);
         fileToMove.moveTo(folder);
       }
+
+    trackDocument(companyName + ' MSA and SOW',completeFileId,'Salesforce SOW');
 
     return completeFileId;
   }
@@ -799,6 +914,8 @@ function createProposal(templatePresentationId) {
       const result = Slides.Presentations.batchUpdate({
         requests: requests
       }, presentationCopyId);
+
+      trackDocument(companyName + ' Salesforce Proposal',presentationCopyId,'Salesforce Proposal');
   
       return presentationCopyId;
     }
