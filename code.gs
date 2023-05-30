@@ -33,11 +33,21 @@ const agilePlusMSA = 'Salesforce Agile Project + MSA';
 const msPlusMSA = 'Salesforce Managed Service + MSA';
 const onDemandPlusMSA = 'Salesforce On Demand Support + MSA';
 const orgAssessmentPlusMSA = 'Salesforce Org Assessment + MSA';
-const ndaNoMSA = 'Salesforce NDA';
+const ndaNoMSA = 'Bitwise NDA';
 const orgAssessmentNoMSA = 'Salesforce Org Assessment (no MSA)';
 const onDemandNoMSA = 'Salesforce On Demand (no MSA)';
-const agileNoPlusMSA = 'Salesforce Agile Project (no MSA)';
+const agileNoMSA = 'Salesforce Agile Project (no MSA)';
 const msNoMSA = 'Salesforce Managed Service (no MSA)';
+
+const agilePlusMSAId = '3e97c65290d4c8df9970f3f9c0b360f514550b2a';
+const msPlusMSAId = '2ec6e1f64b96f897793f9ebc0e45cbd1489f3009';
+const onDemandPlusMSAId = 'c71acfaf7c44c7022b66bc9bfdbed32f1769acac';
+const orgAssessmentPlusMSAId = '60825855b53802c77f4687e1fed1033dc506ed73';
+const ndaNoMSAId = '05c23e0544ad8179a630a78364c8c3ad8f77e744';
+const orgAssessmentNoMSAId = 'b64c8b52266e947e16a66fd62bbce18979cbbf49';
+const onDemandNoMSAId = 'a3b8a07e3cb45413119dc529049b9ee24041aab1';
+const agileNoMSAId = 'b3f8c4d2e238a523f761b214346db5f14055d5bf';
+const msNoMSAId = '3a3755fbfc14f1495ee55388839c835cd961f487';
 
 //email constants
 const legalEmail = 'steve@gokubi.com';
@@ -73,9 +83,13 @@ const orgAssessmentPriceCell = 'B48';
 const contractsFolderIdCell = 'B51'; 
 const projectsFolderIdCell = 'B52'; 
 const agileProjectSummaryCell = 'B53'; 
+const bwPresidentNameCell = 'B55'; 
+const bwPresidentEmailCell = 'B56'; 
+
 
 //id for the estimation sheet for the current project
 var ss = SpreadsheetApp.getActiveSpreadsheet();
+
 dataSpreadsheetId = ss.getId();
 
 //key global variables
@@ -102,8 +116,8 @@ function onOpen() {
         .addItem('Generate NDA', 'genNDA'))
       .addSubMenu(ui.createMenu('Delivery')
         .addItem('Generate Project Requirements Sheet', 'genProjectBASheet'))
-      .addSubMenu(ui.createMenu('Document Sending')
-        .addItem('Send Doc to Legal', 'sendToLegal'))
+      //.addSubMenu(ui.createMenu('Document Sending')
+      //  .addItem('Send Doc to Legal', 'sendToLegal'))
       .addItem('Clone Estimation Sheet for new Customer', 'genEstimationSheet')
       .addToUi();
   
@@ -144,7 +158,6 @@ function onOpen() {
   if(sheet.getRange(msaNeededCell).getValue() != ''){
       msaNeeded == true;
   }
-
 }
 
 //grab the template Ids from the constants tab
@@ -160,7 +173,6 @@ function getTemplateIds(){
   managedServicesSOWTemplateId = constantsSheet.getRange('B15').getValue();
   standardNDATemplateId = constantsSheet.getRange('B16').getValue();
   projectBATemplateId = constantsSheet.getRange('B17').getValue();
-
 }
 
 //add a line to the spreadsheet for attaching to Salesforce Opportunities
@@ -182,7 +194,7 @@ function addFileToOpportunity(fileId,opportunityId, signingTemplate){
   //append row
 
 }
-
+/*
 //grab the highlighted document on the Documents sheet and email it to legal
 function sendToLegal() {
   const specificSheet = "Documents"   // for example
@@ -239,19 +251,31 @@ function sendToLegal() {
     documentsSheet.getRange('F'+ currentRow).setValue(today);
   }
 }
-
+*/
 //function to record docs as they are created
-function trackDocument(docTitle,docId,docType){
+function trackDocument(docTitle,docId,docType,signatureTemplateId){
   //get customer data
   let documentSheet = ss.getSheetByName('Documents');
   let nextRow = documentSheet.getLastRow()+1;
   let data = [];
-
+  //get today's date
   let date = new Date().toLocaleDateString("en-US");
+
+  //create array of the data
   data.push([docTitle,docId,docType,date,'Created']);
   //write array to Documents tab
   documentSheet.getRange(nextRow,1,1,5).setValues(data);
+
+  //add other cells
   documentSheet.getRange('G' + nextRow).setFormula('=HYPERLINK("https://docs.google.com/document/d/' + docId + '/edit","'+ docTitle +'")');
+  documentSheet.getRange('H' + nextRow).setFormula('=IF(OR(E' + nextRow + ' = "Send to Legal",E' + nextRow + ' = "Send for Signature"),MAKE_FUNCTION(E' + nextRow + ' & ":" & B' + nextRow + ' & ":" & Customer!$B$1 & ":" & I' + nextRow + '),"")');
+  documentSheet.getRange('I' + nextRow).setValue(signatureTemplateId);
+  documentSheet.getRange('J' + nextRow).setFormula('=Customer!' + customerNameCell);
+  documentSheet.getRange('K' + nextRow).setFormula('=Customer!' + customerEmailCell);
+  documentSheet.getRange('L' + nextRow).setFormula('=Customer!' + bwPresidentNameCell);
+  documentSheet.getRange('M' + nextRow).setFormula('=Customer!' + bwPresidentEmailCell);
+  documentSheet.getRange('N' + nextRow).setFormula('=Customer!' + bwAccountManagerNameCell);
+  documentSheet.getRange('O' + nextRow).setFormula('=Customer!' + bwAccountManagerEmailCell);
 }
 
 //generate the project ba requirements sheet that will be used by delivery
@@ -520,7 +544,7 @@ function createNDA(ndaTemplateId) {
 
     newNDADoc.saveAndClose();
   }
-  trackDocument(companyName + ' NDA',ndaId,ndaNoMSA);
+  trackDocument(companyName + ' NDA',ndaId,ndaNoMSA,ndaNoMSAId);
 
   return ndaId;
 }
@@ -620,6 +644,7 @@ function createMSASOW(sowType) {
       //check the spreadsheet for if Agile or MS
       if(agileProject){
         sowId = mergeSOW('agile');
+  
       } else {
         sowId = mergeSOW('ms');
       }
@@ -662,14 +687,52 @@ function createMSASOW(sowType) {
     }
 
     //move document to customer folder
-      if(contractsFolderId!=''){
-        customerFolderExists = true;
-        var fileToMove = DriveApp.getFileById(completeFileId);
-        var folder = DriveApp.getFolderById(contractsFolderId);
-        fileToMove.moveTo(folder);
+    if(contractsFolderId!=''){
+      customerFolderExists = true;
+      var fileToMove = DriveApp.getFileById(completeFileId);
+      var folder = DriveApp.getFolderById(contractsFolderId);
+      fileToMove.moveTo(folder);
+    }
+    let docType = '';
+    let signTemplateId = '';
+    if (sowType == 'MSAgile'){
+      if(agileProject){
+        if(msaNeeded){
+          docType = agilePlusMSA;
+          signTemplateId = agilePlusMSAId;
+        } else {
+          docType = agileNoMSA;
+          signTemplateId = agileNoMSAId;
+        }
+      } else {
+        if(msaNeeded){
+          docType = msPlusMSA;
+          signTemplateId = msPlusMSAId;
+        } else {
+          docType = msNoMSA;
+          signTemplateId = msNoMSAId;
+        }
+      }
+    } else if(sowType == 'onDemand'){
+      if(msaNeeded){
+        docType = onDemandPlusMSA;
+        signTemplateId = onDemandPlusMSAId;
+      } else {
+        docType = onDemandNoMSA;
+        signTemplateId = onDemandPlusMSAId;
       }
 
-    trackDocument(companyName + ' MSA and SOW',completeFileId,'Salesforce SOW');
+    } else if(sowType == 'OrgAssessment'){
+      if(msaNeeded){
+        docType = orgAssessmentPlusMSA;
+        signTemplateId = orgAssessmentPlusMSAId;
+      } else {
+        docType = orgAssessmentNoMSA;
+        signTemplateId = orgAssessmentNoMSAId;
+      }
+    }
+    
+    trackDocument(companyName + ' MSA and SOW',completeFileId,docType,signTemplateId);
 
     return completeFileId;
   }
